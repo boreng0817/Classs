@@ -1,0 +1,247 @@
+diff --git a/src/backend/access/transam/xlog.c b/src/backend/access/transam/xlog.c
+index 248a40e..48f74ff 100644
+--- a/src/backend/access/transam/xlog.c
++++ b/src/backend/access/transam/xlog.c
+@@ -36,6 +36,10 @@
+  *-------------------------------------------------------------------------
+  */
+ 
++#define BORDER_COLLIE 1
++// #define WORK_IN_PROCESS 1
++#define MAX(a, b) (a) > (b) ? (a) : (b)
++#define MIN(a, b) (a) < (b) ? (a) : (b)
+ #include "postgres.h"
+ 
+ #include <ctype.h>
+@@ -148,7 +152,11 @@ int			wal_segment_size = DEFAULT_XLOG_SEG_SIZE;
+  * to happen concurrently, but adds some CPU overhead to flushing the WAL,
+  * which needs to iterate all the locks.
+  */
++#ifdef BORDER_COLLIE
++#define NUM_XLOGINSERT_LOCKS  64
++#else
+ #define NUM_XLOGINSERT_LOCKS  8
++#endif
+ 
+ /*
+  * Max distance from last checkpoint, before triggering a new xlog-based
+@@ -331,6 +339,14 @@ typedef struct XLogwrtResult
+ 	XLogRecPtr	Flush;			/* last byte + 1 flushed */
+ } XLogwrtResult;
+ 
++#ifdef BORDER_COLLIE
++enum Flag {
++  WHITE,
++  BLACK,
++  UNDEFINED
++};
++#endif
++
+ /*
+  * Inserting to WAL is protected by a small fixed number of WAL insertion
+  * locks. To insert to the WAL, you must hold one of the locks - it doesn't
+@@ -372,6 +388,10 @@ typedef struct
+ 	LWLock		lock;
+ 	XLogRecPtr	insertingAt;
+ 	XLogRecPtr	lastImportantAt;
++#ifdef BORDER_COLLIE
++  XLogRecPtr  currentLSN;
++  enum Flag   flagColor;
++#endif
+ } WALInsertLock;
+ 
+ /*
+@@ -788,11 +808,17 @@ XLogInsertRecord(XLogRecData *rdata,
+ 	 *
+ 	 *----------
+ 	 */
++
+ 	START_CRIT_SECTION();
++
++#ifdef WORK_IN_PROCESS 
++  /* BORDER_COLLIE do not acquire lock */
++#else
+ 	if (isLogSwitch)
+ 		WALInsertLockAcquireExclusive();
+ 	else
+ 		WALInsertLockAcquire();
++#endif 
+ 
+ 	/*
+ 	 * Check to see if my copy of RedoRecPtr is out of date. If so, may have
+@@ -825,7 +851,10 @@ XLogInsertRecord(XLogRecData *rdata,
+ 		 * Oops, some buffer now needs to be backed up that the caller didn't
+ 		 * back up.  Start over.
+ 		 */
++#ifdef WORK_IN_PROCESS
++#else
+ 		WALInsertLockRelease();
++#endif
+ 		END_CRIT_SECTION();
+ 		return InvalidXLogRecPtr;
+ 	}
+@@ -841,6 +870,10 @@ XLogInsertRecord(XLogRecData *rdata,
+ 		ReserveXLogInsertLocation(rechdr->xl_tot_len, &StartPos, &EndPos,
+ 								  &rechdr->xl_prev);
+ 		inserted = true;
++#ifdef BORDER_COLLIE
++    WALInsertLocks[MyLockNo].l.flagColor = BLACK;
++    WALInsertLocks[MyLockNo].l.currentLSN = StartPos;
++#endif
+ 	}
+ 
+ 	if (inserted)
+@@ -861,6 +894,11 @@ XLogInsertRecord(XLogRecData *rdata,
+ 		CopyXLogRecordToWAL(rechdr->xl_tot_len, isLogSwitch, rdata,
+ 							StartPos, EndPos, insertTLI);
+ 
++#ifdef BORDER_COLLIE
++    WALInsertLocks[MyLockNo].l.flagColor = WHITE;
++    WALInsertLocks[MyLockNo].l.currentLSN = EndPos;
++#endif
++
+ 		/*
+ 		 * Unless record is flagged as not important, update LSN of last
+ 		 * important record in the current slot. When holding all locks, just
+@@ -885,8 +923,10 @@ XLogInsertRecord(XLogRecData *rdata,
+ 	/*
+ 	 * Done! Let others know that we're finished.
+ 	 */
++#ifdef WORK_IN_PROCESS
++#else
+ 	WALInsertLockRelease();
+-
++#endif
+ 	END_CRIT_SECTION();
+ 
+ 	MarkCurrentTransactionIdLoggedIfAny();
+@@ -1061,6 +1101,13 @@ ReserveXLogInsertLocation(int size, XLogRecPtr *StartPos, XLogRecPtr *EndPos,
+ 	 * because the usable byte position doesn't include any headers, reserving
+ 	 * X bytes from WAL is almost as simple as "CurrBytePos += X".
+ 	 */
++#ifdef BORDER_COLLIE 
++  /* reserve log space for XLog with atomic fetch and add */
++  startbytepos = __sync_fetch_and_add(&Insert->CurrBytePos, size);
++  endbytepos = startbytepos + size;
++  prevbytepos = Insert->PrevBytePos;
++  Insert->PrevBytePos = startbytepos;
++#else
+ 	SpinLockAcquire(&Insert->insertpos_lck);
+ 
+ 	startbytepos = Insert->CurrBytePos;
+@@ -1070,6 +1117,7 @@ ReserveXLogInsertLocation(int size, XLogRecPtr *StartPos, XLogRecPtr *EndPos,
+ 	Insert->PrevBytePos = startbytepos;
+ 
+ 	SpinLockRelease(&Insert->insertpos_lck);
++#endif
+ 
+ 	*StartPos = XLogBytePosToRecPtr(startbytepos);
+ 	*EndPos = XLogBytePosToEndRecPtr(endbytepos);
+@@ -1401,6 +1449,9 @@ WALInsertLockRelease(void)
+ static void
+ WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt)
+ {
++#ifdef WORK_IN_PROCESS
++  /* Do nothing */
++#else
+ 	if (holdingAllLocks)
+ 	{
+ 		/*
+@@ -1415,6 +1466,7 @@ WALInsertLockUpdateInsertingAt(XLogRecPtr insertingAt)
+ 		LWLockUpdateVar(&WALInsertLocks[MyLockNo].l.lock,
+ 						&WALInsertLocks[MyLockNo].l.insertingAt,
+ 						insertingAt);
++#endif
+ }
+ 
+ /*
+@@ -2705,6 +2757,11 @@ XLogBackgroundFlush(void)
+ 	int			flushbytes;
+ 	TimeLineID	insertTLI;
+ 
++#ifdef BORDER_COLLIE
++  XLogRecPtr cutoff;
++  XLogRecPtr RLB;
++#endif
++
+ 	/* XLOG doesn't need flushing during recovery */
+ 	if (RecoveryInProgress())
+ 		return false;
+@@ -2796,12 +2853,58 @@ XLogBackgroundFlush(void)
+ 			 LSN_FORMAT_ARGS(LogwrtResult.Flush));
+ #endif
+ 
++#ifdef BORDER_COLLIE
++
++
++  /* cutoff flag */
++  cutoff = (XLogRecPtr)XLogCtl->Insert.CurrBytePos;
++  /* set RLB as max value */
++  RLB = PG_UINT64_MAX;
++
++  /* 
++   * get RLB (Recoverable Logging Boundary) 
++   * Main BORDER_COLLIE algorithm
++   */
++  for (int i = 0; i < NUM_XLOGINSERT_LOCKS; ++i) {
++    XLogRecPtr currLSN = WALInsertLocks[i].l.currentLSN;
++    enum Flag flag = WALInsertLocks[i].l.flagColor;
++
++    if (flag == BLACK) { 
++      RLB = MIN(currLSN, RLB);
++    } else if (flag == WHITE) {
++      RLB = MIN(MAX(cutoff, currLSN), RLB);
++    } else {
++      continue;
++    }
++  }
++
++  /* set request */
++  WriteRqst.Write = RLB == PG_UINT64_MAX ? 0 : RLB;
++
++  /* 
++   * Since XLogWrite needs critical section, but it doesn't 
++   * have to acuire Lock via LWLockAcquire().
++   */
++	if (WriteRqst.Write > LogwrtResult.Write ||
++		WriteRqst.Flush > LogwrtResult.Flush)
++	{
++    START_CRIT_SECTION();
++    XLogWrite(WriteRqst, insertTLI, flexible);
++    END_CRIT_SECTION();
++  }
++
++	AdvanceXLInsertBuffer(InvalidXLogRecPtr, insertTLI, true);
++
++  return true;
++
++#else // NO BORDER_COLLIE
+ 	START_CRIT_SECTION();
+ 
+ 	/* now wait for any in-progress insertions to finish and get write lock */
+ 	WaitXLogInsertionsToFinish(WriteRqst.Write);
+ 	LWLockAcquire(WALWriteLock, LW_EXCLUSIVE);
+ 	LogwrtResult = XLogCtl->LogwrtResult;
++
+ 	if (WriteRqst.Write > LogwrtResult.Write ||
+ 		WriteRqst.Flush > LogwrtResult.Flush)
+ 	{
+@@ -2826,6 +2929,7 @@ XLogBackgroundFlush(void)
+ 	 * avoid hibernating too early.
+ 	 */
+ 	return true;
++#endif // NO BORDER_COLLIE
+ }
+ 
+ /*
+@@ -4463,6 +4567,10 @@ XLOGShmemInit(void)
+ 		LWLockInitialize(&WALInsertLocks[i].l.lock, LWTRANCHE_WAL_INSERT);
+ 		WALInsertLocks[i].l.insertingAt = InvalidXLogRecPtr;
+ 		WALInsertLocks[i].l.lastImportantAt = InvalidXLogRecPtr;
++#ifdef BORDER_COLLIE
++		WALInsertLocks[i].l.currentLSN = InvalidXLogRecPtr;
++		WALInsertLocks[i].l.flagColor = UNDEFINED;
++#endif
+ 	}
+ 
+ 	/*

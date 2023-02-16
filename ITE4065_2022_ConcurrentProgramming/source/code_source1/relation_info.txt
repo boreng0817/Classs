@@ -1,0 +1,96 @@
+r0 : length : 37480	# of columns: 3
+columns<uint64_t*> length : 3
+col0    min_val : 1	max_val : 2324
+col1    min_val : 4408	max_val : 10262
+col2    min_val : 215	max_val : 8626
+
+r1 : length : 90112	# of columns: 3
+columns<uint64_t*> length : 3
+col0    min_val : 4	max_val : 5773
+col1    min_val : 2905	max_val : 5714
+col2    min_val : 3133	max_val : 11041
+
+r2 : length : 857872	# of columns: 4
+columns<uint64_t*> length : 4
+col0    min_val : 4	max_val : 39969
+col1    min_val : 4	max_val : 11410
+col2    min_val : 1	max_val : 4690
+col3    min_val : 2147	max_val : 2746
+
+r3 : length : 737232	# of columns: 4
+columns<uint64_t*> length : 4
+col0    min_val : 5	max_val : 35022
+col1    min_val : 4	max_val : 11410
+col2    min_val : 1	max_val : 4690
+col3    min_val : 2624	max_val : 7880
+
+r4 : length : 74304	# of columns: 2
+columns<uint64_t*> length : 2
+col0    min_val : 4	max_val : 7061
+col1    min_val : 7	max_val : 11410
+
+r5 : length : 157136	# of columns: 4
+columns<uint64_t*> length : 4
+col0    min_val : 2	max_val : 7460
+col1    min_val : 8	max_val : 11397
+col2    min_val : 1	max_val : 4690
+col3    min_val : 6013	max_val : 10466
+
+r6 : length : 422224	# of columns: 2
+columns<uint64_t*> length : 2
+col0    min_val : 2	max_val : 39690
+col1    min_val : 4	max_val : 11410
+
+r7 : length : 1993456	# of columns: 6
+columns<uint64_t*> length : 6
+col0    min_val : 2	max_val : 62261
+col1    min_val : 1	max_val : 4690
+col2    min_val : 4	max_val : 11410
+col3    min_val : 4042	max_val : 8961
+col4    min_val : 9470	max_val : 14059
+col5    min_val : 3254	max_val : 3758
+
+r8 : length : 984976	# of columns: 4
+columns<uint64_t*> length : 4
+col0    min_val : 5	max_val : 46365
+col1    min_val : 4	max_val : 11410
+col2    min_val : 1	max_val : 4690
+col3    min_val : 9299	max_val : 10957
+
+r9 : length : 198256	# of columns: 5
+columns<uint64_t*> length : 5
+col0    min_val : 2	max_val : 7425
+col1    min_val : 1	max_val : 4690
+col2    min_val : 4	max_val : 11410
+col3    min_val : 2395	max_val : 12224
+col4    min_val : 6278	max_val : 7982
+
+r10 : length : 287608	# of columns: 3
+columns<uint64_t*> length : 3
+col0    min_val : 1	max_val : 17908
+col1    min_val : 4	max_val : 11410
+col2    min_val : 1	max_val : 4690
+
+r11 : length : 415120	# of columns: 3
+columns<uint64_t*> length : 3
+col0    min_val : 5	max_val : 26012
+col1    min_val : 4	max_val : 11410
+col2    min_val : 1	max_val : 4690
+
+r12 : length : 1141336	# of columns: 5
+columns<uint64_t*> length : 5
+col0    min_val : 2	max_val : 42556
+col1    min_val : 4	max_val : 11410
+col2    min_val : 4	max_val : 11410
+col3    min_val : 5126	max_val : 8088
+col4    min_val : 5048	max_val : 14485
+
+r13 : length : 2415352	# of columns: 7
+columns<uint64_t*> length : 7
+col0    min_val : 5	max_val : 64630
+col1    min_val : 1	max_val : 4690
+col2    min_val : 1	max_val : 4690
+col3    min_val : 9640	max_val : 18040
+col4    min_val : 9418	max_val : 15094
+col5    min_val : 6422	max_val : 11882
+col6    min_val : 3076	max_val : 12926

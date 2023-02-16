@@ -1,0 +1,5 @@
+3
+
+1 : 1 collect, 1 naive update
+2 : Simple snapshot implementation
+3 : Wait Free snapshot implementation
